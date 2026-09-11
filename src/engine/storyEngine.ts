@@ -57,44 +57,53 @@ function applyEffects(story: StoryData, vars: Record<string, VariableValue>, efe
   return next;
 }
 
-function resolveDisplayText(node: Nodo, vars: Record<string, VariableValue>): { text: string; efectos?: EfectosNodo } {
+function resolveDisplayText(
+  node: Nodo,
+  vars: Record<string, VariableValue>
+): { text: string; efectos?: EfectosNodo; destino?: string } {
   let text = node.texto;
   let ramaEfectos: EfectosNodo | undefined;
+  let ramaDestino: string | undefined;
   if (node.ramas) {
     for (const rama of node.ramas) {
       if (evaluateCondition(rama.condicion, vars)) {
         if (rama.texto) text = `${text}\n\n${rama.texto}`;
         ramaEfectos = rama.efectos;
+        ramaDestino = rama.destino;
         break;
       }
     }
   }
-  return { text, efectos: ramaEfectos };
+  return { text, efectos: ramaEfectos, destino: ramaDestino };
+}
+
+function buildEnding(story: StoryData, id: string, vars: Record<string, VariableValue>): EndingResult {
+  const final = story.finales[id] as Final;
+  const ruta = vars.ruta as string;
+  const texto = (ruta === 'mora' ? final.texto_mora : final.texto_replicante) ?? '';
+  return { id, titulo: final.titulo, texto };
 }
 
 function evaluateFinal(story: StoryData, vars: Record<string, VariableValue>): EndingResult {
   const orden = story.finales.orden_evaluacion as string[];
-  const ruta = vars.ruta as string;
   for (const id of orden) {
     const final = story.finales[id] as Final;
-    if (evaluateCondition(final.condicion, vars)) {
-      return {
-        id,
-        titulo: final.titulo,
-        texto: ruta === 'mora' ? final.texto_mora : final.texto_replicante,
-      };
-    }
+    if (evaluateCondition(final.condicion, vars)) return buildEnding(story, id, vars);
   }
-  const fallbackId = orden[orden.length - 1];
-  const fallback = story.finales[fallbackId] as Final;
-  return {
-    id: fallbackId,
-    titulo: fallback.titulo,
-    texto: ruta === 'mora' ? fallback.texto_mora : fallback.texto_replicante,
-  };
+  return buildEnding(story, orden[orden.length - 1], vars);
 }
 
-export function enterNode(story: StoryData, state: GameState, nodeId: string): GameState {
+// La regla de batería agotada solo se declara en un par de nodos, pero el
+// frío se puede acabar en cualquier punto de la ruta del replicante: se
+// aplica en todo el recorrido para que ese final no quede inalcanzable.
+function reglaBateriaAgotada(story: StoryData) {
+  for (const nodo of Object.values(story.nodos)) {
+    if (nodo.reglas?.bateria_agotada) return nodo.reglas.bateria_agotada;
+  }
+  return undefined;
+}
+
+export function enterNode(story: StoryData, state: GameState, nodeId: string, prefijo = ''): GameState {
   const node = story.nodos[nodeId];
   if (!node) throw new Error(`Nodo desconocido: ${nodeId}`);
 
@@ -102,30 +111,47 @@ export function enterNode(story: StoryData, state: GameState, nodeId: string): G
   if (node.ruta) vars.ruta = node.ruta;
   vars = applyEffects(story, vars, node.efectos);
 
-  const { text, efectos: ramaEfectos } = resolveDisplayText(node, vars);
+  const { text, efectos: ramaEfectos, destino: ramaDestino } = resolveDisplayText(node, vars);
   vars = applyEffects(story, vars, ramaEfectos);
 
-  let nextState: GameState = {
+  const textoCompleto = prefijo ? `${prefijo}\n\n${text}` : text;
+
+  const nextState: GameState = {
     ...state,
     currentNodeId: nodeId,
     vars,
-    displayText: text,
+    displayText: textoCompleto,
     ending: null,
   };
 
-  if (node.resolucion === 'evaluar_finales') {
-    nextState = { ...nextState, ending: evaluateFinal(story, vars) };
-    return nextState;
+  const agotada = reglaBateriaAgotada(story);
+  if (agotada && nodeId !== agotada.destino && evaluateCondition(agotada.si, vars)) {
+    return enterNode(story, nextState, agotada.destino, textoCompleto);
   }
 
-  if (node.tipo === 'hub') {
+  // Un nodo que solo bifurca arrastra su texto al destino en vez de pedir
+  // un clic intermedio (ver tipo "bifurcacion_automatica" en el guion).
+  if (ramaDestino) {
+    return enterNode(story, nextState, ramaDestino, textoCompleto);
+  }
+
+  if (node.resolucion?.startsWith('final:')) {
+    const id = node.resolucion.slice('final:'.length);
+    return { ...nextState, ending: buildEnding(story, id, vars) };
+  }
+
+  if (node.resolucion === 'evaluar_finales') {
+    return { ...nextState, ending: evaluateFinal(story, vars) };
+  }
+
+  if (node.tipo === 'hub' && node.reglas?.destino_salida) {
     const progress = state.hubProgress[nodeId] ?? { visitedDestinos: [], visitCount: 0 };
-    const forcedByBattery = node.reglas?.salida_forzada_si
+    const forcedByBattery = node.reglas.salida_forzada_si
       ? evaluateCondition(node.reglas.salida_forzada_si, vars)
       : false;
-    const exhausted = !!node.reglas && progress.visitCount >= node.reglas.max_visitas;
+    const exhausted = node.reglas.max_visitas != null && progress.visitCount >= node.reglas.max_visitas;
 
-    if (node.reglas && (forcedByBattery || exhausted)) {
+    if (forcedByBattery || exhausted) {
       return enterNode(story, nextState, node.reglas.destino_salida);
     }
   }
@@ -140,7 +166,8 @@ export function visibleOptions(story: StoryData, state: GameState): Opcion[] {
   return node.opciones.filter((opcion) => {
     if (opcion.condicion && !evaluateCondition(opcion.condicion, state.vars)) return false;
     if (opcion.visitable_una_vez && progress?.visitedDestinos.includes(opcion.destino)) return false;
-    if (opcion.visitable_una_vez && node.reglas && progress && progress.visitCount >= node.reglas.max_visitas) {
+    const maxVisitas = node.reglas?.max_visitas;
+    if (opcion.visitable_una_vez && maxVisitas != null && progress && progress.visitCount >= maxVisitas) {
       return false;
     }
     return true;

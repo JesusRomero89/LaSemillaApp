@@ -25,12 +25,21 @@ export interface Rama {
   condicion: string;
   texto?: string;
   efectos?: EfectosNodo;
+  // Una rama con destino encamina el nodo: se usa en nodos sin opciones
+  // propias, que solo sirven para bifurcar (p. ej. m_05d_salida).
+  destino?: string;
 }
 
-export interface ReglasHub {
-  max_visitas: number;
+export interface ReglaBateriaAgotada {
+  si: string;
+  destino: string;
+}
+
+export interface ReglasNodo {
+  max_visitas?: number;
   salida_forzada_si?: string;
-  destino_salida: string;
+  destino_salida?: string;
+  bateria_agotada?: ReglaBateriaAgotada;
 }
 
 export interface Nodo {
@@ -38,19 +47,23 @@ export interface Nodo {
   hora?: string;
   titulo?: string;
   texto: string;
-  tipo?: 'hub' | 'convergencia' | 'decision_clave';
+  tipo?: 'hub' | 'convergencia' | 'decision_clave' | 'bifurcacion_automatica';
   efectos?: EfectosNodo;
   ramas?: Rama[];
-  reglas?: ReglasHub;
+  reglas?: ReglasNodo;
   opciones?: Opcion[];
-  resolucion?: 'evaluar_finales';
+  // "evaluar_finales" elige final por condiciones; "final:<id>" va directo
+  // a ese final (muertes y cortes secos).
+  resolucion?: string;
+  nota?: string;
 }
 
 export interface Final {
   titulo: string;
   condicion: string;
-  texto_mora: string;
-  texto_replicante: string;
+  // Los finales directos solo traen el texto de la ruta en la que ocurren.
+  texto_mora?: string;
+  texto_replicante?: string;
 }
 
 export interface Personaje {

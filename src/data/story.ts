@@ -4,8 +4,9 @@ import type { StoryData } from '../types/story';
 // "bateria" como texto narrativo ("+90 y luego -60 por el tiempo perdido").
 // Aquí se guarda el delta neto ya calculado para que el motor solo tenga
 // que sumar números. El texto narrativo completo se conserva en el nodo.
-// También se añade "mora_sospecha" a las variables: se usa en dos nodos de
-// la ruta de Mora pero no estaba declarada en el bloque "variables" original.
+// A "bateria" se le añade además un rango: una batería no puede cargarse
+// por encima de su capacidad (360 min), y las paradas de recarga suman
+// bastante más que eso.
 
 export const storyData: StoryData = {
   meta: {
@@ -67,15 +68,29 @@ export const storyData: StoryData = {
 
   variables: {
     genero: { tipo: 'string', inicial: 'm', valores: ['m', 'f'] },
-    bateria: { tipo: 'int', inicial: 360, rango: [0, 360], unidad: 'minutos', nota: 'Reloj de la ruta del replicante. 360 = carga completa.' },
+    bateria: {
+      tipo: 'int',
+      inicial: 360,
+      rango: [0, 360],
+      unidad: 'minutos',
+      nota: 'Reloj de la ruta del replicante. 360 = carga completa.',
+    },
     teo_ayuda: { tipo: 'bool', inicial: false },
     teo_delata: { tipo: 'bool', inicial: false },
     sabe_verdad: { tipo: 'bool', inicial: false, nota: 'Sabe qué es realmente la semilla.' },
     vio_restos: { tipo: 'bool', inicial: false, nota: 'Vio los restos del intento anterior en los túneles.' },
     mora_declaro: { tipo: 'bool', inicial: false },
     mora_sabe_precedente: { tipo: 'bool', inicial: false },
-    mora_sospecha: { tipo: 'int', inicial: 0, nota: 'Pistas de sospecha recogidas por Mora (no puntuada en los finales).' },
     confianza: { tipo: 'int', inicial: 0, rango: [-3, 5], nota: 'Vínculo entre Mora y el replicante.' },
+    ayudo_escape: { tipo: 'bool', inicial: false, nota: 'Mora ayudó activamente en el puente.' },
+    rastro: { tipo: 'bool', inicial: false, nota: 'Su código de agente quedó registrado.' },
+    sabe_rastreo_caja: { tipo: 'bool', inicial: false, nota: 'Sabe que rastrean la caja, no al replicante.' },
+    mora_sospecha: { tipo: 'int', inicial: 0 },
+    ruta: { tipo: 'string', inicial: '', valores: ['mora', 'replicante'] },
+    mora_vio_caja: { tipo: 'bool', inicial: false },
+    sabe_cierre_pasarela: { tipo: 'bool', inicial: false },
+    sobrio: { tipo: 'bool', inicial: true, nota: 'Si bebe en el bar, se desactiva y abre las ramas de riesgo.' },
+    identificado: { tipo: 'bool', inicial: false, nota: 'Un control le ha leído la placa del cuello.' },
   },
 
   inicio: 'n_prologo',
@@ -169,20 +184,62 @@ export const storyData: StoryData = {
           efectos: { bateria: -30 },
         },
       ],
-      opciones: [{ texto: 'Meterte en la ciudad', destino: 'r_hub' }],
+      opciones: [{ texto: 'Meterte en la ciudad', destino: 'r_10_callejon' }],
+    },
+
+    r_10_callejon: {
+      ruta: 'replicante',
+      hora: '05:10',
+      titulo: 'El callejón',
+      texto:
+        'Contenedores, vapor, una escalera de incendios goteando. Llevas dos horas sin parar y la caja pita cada media hora. Te encoges contra la pared mojada. Entonces oyes pasos: unos zapatos malos, de alguien que no quiere estar aquí. Un hombre con gabardina entra en el callejón y te ve. Tarda un segundo de más en llevarse la mano al arma, y en ese segundo entiendes que te ha visto a ti antes que a lo que eres.',
+      opciones: [
+        { texto: 'Hablarle', efectos: { confianza: 1 }, destino: 'r_11_hablar' },
+        { texto: 'Correr', destino: 'r_12_correr' },
+        { texto: 'Enseñarle lo que llevas en la caja', efectos: { confianza: 2, mora_vio_caja: true }, destino: 'r_13_mostrar' },
+      ],
+    },
+
+    r_11_hablar: {
+      ruta: 'replicante',
+      texto:
+        'Le dices que no has matado a nadie. Él contesta que eso no es lo que le han mandado averiguar. Pero no dispara, y no llama por radio, y los dos os quedáis ahí mirándoos mientras la caja pita.',
+      opciones: [
+        { texto: 'Contarle lo de la orden de incineración', efectos: { confianza: 1 }, destino: 'r_hub' },
+        { texto: 'Aprovechar y echar a correr', efectos: { confianza: -1 }, destino: 'r_12_correr' },
+      ],
+    },
+
+    r_12_correr: {
+      ruta: 'replicante',
+      efectos: { bateria: -40, confianza: -1 },
+      texto: 'Corres. Él no dispara, pero tampoco se queda quieto. Sales del callejón hacia el paseo y la ciudad empieza a despertarse a tu alrededor, que es lo peor que podía pasar.',
+      opciones: [{ texto: 'Perderte en el puerto', destino: 'r_hub' }],
+    },
+
+    r_13_mostrar: {
+      ruta: 'replicante',
+      texto:
+        'Abres la caja lo justo. El vaho sale y se queda un momento entre los dos. No sabes explicarle del todo qué es, solo que lo queman esta mañana. Ves cómo un hombre que lleva media vida cerrando expedientes se queda sin saber en qué casilla poner esto.',
+      opciones: [{ texto: 'Irte mientras él sigue mirando la caja', efectos: { confianza: 1 }, destino: 'r_hub' }],
     },
 
     r_hub: {
       ruta: 'replicante',
       tipo: 'hub',
       texto:
-        'La caja pesa y avisa. Cada media hora suelta un pitido corto que recuerda que el frío se acaba. Necesitas corriente, o necesitas frío, y los dos están en sitios malos.',
-      reglas: { max_visitas: 2, salida_forzada_si: 'bateria <= 60', destino_salida: 'r_10_callejon' },
+        'El hombre de la gabardina se ha quedado atrás y la ciudad empieza a moverse. La caja pesa y avisa: cada media hora suelta un pitido corto que recuerda que el frío se acaba. Necesitas corriente, o necesitas frío, y los dos están en sitios malos.',
+      reglas: {
+        max_visitas: 2,
+        destino_salida: 'r_18_control',
+        salida_forzada_si: 'bateria <= 60',
+        bateria_agotada: { si: 'bateria <= 0', destino: 'r_19_frio' },
+      },
       opciones: [
         { texto: 'El mercado del puerto', destino: 'r_05_mercado', visitable_una_vez: true },
         { texto: 'La clínica clandestina del subsuelo', destino: 'r_06_clinica', visitable_una_vez: true },
         { texto: 'Los túneles de refrigeración', destino: 'r_07_tuneles', visitable_una_vez: true },
-        { texto: 'No parar en ningún sitio. Seguir andando.', destino: 'r_10_callejon' },
+        { texto: 'No parar en ningún sitio. Seguir andando.', destino: 'r_18_control' },
       ],
     },
 
@@ -250,41 +307,145 @@ export const storyData: StoryData = {
       opciones: [{ texto: 'Subir a la calle', destino: 'r_hub' }],
     },
 
-    r_10_callejon: {
+    r_18_control: {
       ruta: 'replicante',
-      hora: 'amanecer',
-      titulo: 'El callejón',
+      hora: '06:20',
+      titulo: 'Control de identidad',
       texto:
-        'Contenedores, vapor, una escalera de incendios goteando. Llevas horas sin parar y la caja pita cada poco. Te encoges contra la pared mojada. Entonces oyes pasos: unos zapatos malos, de alguien que no quiere estar aquí. Un hombre con gabardina entra en el callejón y te ve. Tarda un segundo de más en llevarse la mano al arma, y en ese segundo entiendes que te ha visto a ti antes que a lo que eres.',
+        'En la boca del mercado han montado un control: dos agentes, un lector de nuca y una cola de treinta personas esperando bajo la lluvia. Todos los que están en esa cola son de los tuyos. Es a lo que llaman verificación rutinaria y siempre es rutinaria a las seis de la mañana, nunca a las seis de la tarde.',
       opciones: [
-        { texto: 'Hablarle', condicion: 'bateria > 60', efectos: { confianza: 1 }, destino: 'r_11_hablar' },
-        { texto: 'Correr', destino: 'r_12_correr' },
-        { texto: 'Enseñarle lo que llevas en la caja', condicion: 'sabe_verdad == true', efectos: { confianza: 3 }, destino: 'r_13_mostrar' },
+        { texto: 'Ponerte en la cola como si nada', efectos: { identificado: true, bateria: -50 }, destino: 'r_18a_cola' },
+        { texto: 'Meterte por el canal de desagüe', efectos: { bateria: -20 }, destino: 'r_18b_canal' },
+        { texto: 'Dar media vuelta y rodear por el paseo', efectos: { bateria: -70 }, destino: 'r_15_teo' },
       ],
     },
 
-    r_11_hablar: {
+    r_18a_cola: {
       ruta: 'replicante',
       texto:
-        'Le dices que no has matado a nadie. Él contesta que eso no es lo que le han mandado averiguar. Pero no dispara, y no llama por radio, y los dos os quedáis ahí mirándoos mientras la caja pita.',
+        'Funciona, que es lo peor. El agente te pasa el lector por la nuca, mira la pantalla, ve mantenimiento nocturno de Solaris y te devuelve la caja sin abrirla porque lleva el anagrama de la empresa impreso en la tapa. Pasas. Y a los veinte metros entiendes que tu número acaba de quedar registrado a las seis y veintidós en la boca del mercado.',
+      opciones: [{ texto: 'Seguir andando deprisa', destino: 'r_15_teo' }],
+    },
+
+    r_18b_canal: {
+      ruta: 'replicante',
+      texto:
+        'El canal de desagüe baja del mercado al agua y tiene el ancho de un hombre agachado. Hueles todo lo que la ciudad no quiere y sales por una rejilla al otro lado con la caja por encima de la cabeza, como quien cruza un río con un niño.',
+      opciones: [{ texto: 'Subir al mirador', destino: 'r_15_teo' }],
+    },
+
+    r_19_frio: {
+      ruta: 'replicante',
+      titulo: 'Cuando el piloto se pone rojo',
+      texto:
+        'El piloto de la caja pasa de ámbar a rojo y el pitido deja de ser cada media hora para ser continuo. No hay drama, no hay aviso, no hay nadie persiguiéndote en este momento concreto: simplemente el gel empieza a cambiar de color en tus manos, en mitad de una calle cualquiera, mientras amanece.\n\nTe sientas en el bordillo con la caja abierta en las rodillas y te quedas ahí hasta que la recogen. No te resistes. Nunca hubo una pelea: había seis horas de batería y una ciudad demasiado grande.',
+      resolucion: 'final:f_semilla_fria',
+    },
+
+    r_15_teo: {
+      ruta: 'replicante',
+      hora: '06:40',
+      titulo: 'Teo',
+      texto: 'Un mirador sobre el puerto, con la ciudad alta encendiéndose al otro lado del agua.',
+      ramas: [
+        {
+          condicion: 'teo_delata == true',
+          texto:
+            'Teo está esperándote y no se molesta en disimularlo. Dice que le preguntaron y que contestó, y que lleva nueve años conservando ese puesto a base de contestar. No se disculpa. Te dice que te queda poco y que él no puede hacer nada más.',
+        },
+        {
+          condicion: 'teo_ayuda == true && teo_delata == false',
+          texto:
+            'Teo te localiza por la radio de servicio, con la voz baja de quien habla desde una garita. No pregunta cómo estás. Te dice que van a cerrar la pasarela del puerto a las siete y que después de esa hora no hay manera de subir a la ciudad alta.',
+          efectos: { sabe_cierre_pasarela: true },
+        },
+        {
+          condicion: 'teo_ayuda == false',
+          texto:
+            'En una pantalla del mirador, entre anuncios, sale un plano de la planta: dos unidades sacando a un replicante de seguridad por el ala norte. Es Teo. No te ayudó, no te delató, no hizo nada, y aun así se lo llevan. Así funciona esto.',
+        },
+      ],
+      opciones: [{ texto: 'Seguir hacia la pasarela', destino: 'r_16_eida' }],
+    },
+
+    r_16_eida: {
+      ruta: 'replicante',
+      hora: '06:55',
+      titulo: 'La llamada',
+      texto:
+        'La caja tiene un terminal de servicio que nunca has usado. Se enciende solo. Al otro lado hay una mujer que dice llamarse Eida Lunaris y que no te habla como se le habla a un producto: te pregunta tu nombre y espera la respuesta. Te explica que lo que llevas ahí no es un robo, es un problema, y que ella lleva once años administrando problemas que no eligió.',
       opciones: [
-        { texto: 'Contarle lo de la orden de incineración', efectos: { confianza: 1 }, destino: 'r_14_cruce' },
-        { texto: 'Aprovechar y echar a correr', efectos: { confianza: -1 }, destino: 'r_12_correr' },
+        { texto: 'Escucharla hasta el final', destino: 'r_16b_oferta' },
+        { texto: 'Preguntarle qué le pasó al del túnel', condicion: 'vio_restos == true', destino: 'r_16c_anterior' },
+        { texto: 'Apagar el terminal', efectos: { bateria: -10 }, destino: 'r_17_pasarela' },
       ],
     },
 
-    r_12_correr: {
-      ruta: 'replicante',
-      efectos: { bateria: -40, confianza: -1 },
-      texto: 'Corres. Él no dispara, pero tampoco se queda quieto. Sales del callejón hacia el paseo y la ciudad empieza a despertarse a tu alrededor, que es lo peor que podía pasar.',
-      opciones: [{ texto: 'Seguir', destino: 'r_14_cruce' }],
-    },
-
-    r_13_mostrar: {
+    r_16b_oferta: {
       ruta: 'replicante',
       texto:
-        'Abres la caja lo justo. El vaho sale y se queda un momento entre los dos. Le explicas qué es. Ves cómo un hombre que lleva media vida cerrando expedientes se queda sin saber en qué casilla poner esto.',
-      opciones: [{ texto: 'Pedirle ayuda', efectos: { confianza: 1 }, destino: 'r_14_cruce' }],
+        'La oferta es buena y por eso da miedo. Devuelves la caja, ella cierra el incidente, y tú amaneces mañana en otro turno, en otra planta, sin expediente y sin memoria de esta noche. Lo dice sin amenazar ni una vez. Y justo antes de colgar añade que ella tampoco firmó la orden con gusto, y no sabes si eso es verdad o es la parte mejor ensayada.',
+      opciones: [{ texto: 'Colgar', destino: 'r_17_pasarela' }],
+    },
+
+    r_16c_anterior: {
+      ruta: 'replicante',
+      texto:
+        'Se queda callada más tiempo del que necesita una mentira. Luego dice que aquello se gestionó mal y que por eso esta vez ha querido hablar contigo antes. No dice qué pasó, ni cómo se llamaba, ni si alguien preguntó por él. Dice «se gestionó».',
+      efectos: { sabe_verdad: true },
+      opciones: [{ texto: 'Colgar', destino: 'r_17_pasarela' }],
+    },
+
+    r_17_pasarela: {
+      ruta: 'replicante',
+      hora: '07:10',
+      titulo: 'El pasillo de servicio',
+      texto:
+        'La pasarela que sube a la ciudad alta tiene por debajo un pasillo de servicio de metro y medio de ancho. Arriba, a través de la rejilla, se ven botas y una mesa plegable: un control de Solaris. Y en algún sitio hay un escáner, porque cada treinta segundos, cuando la caja pita, las botas de arriba se quedan quietas un momento.\n\nAl fondo del pasillo hay una compuerta de servicio cerrada. Detrás de ti, dos unidades bajando la escalera sin ninguna prisa.',
+      ramas: [
+        { condicion: 'sabe_cierre_pasarela == true', texto: 'Y son las siete y diez. La pasarela se cierra en nada.' },
+      ],
+      opciones: [
+        { texto: 'Apagar la caja para que deje de pitar', efectos: { bateria: -120 }, destino: 'r_17a_apagar' },
+        { texto: 'Meterte en el hueco de los conductos y esperar', efectos: { bateria: -40 }, destino: 'r_17b_esconderse' },
+        { texto: 'Ir a la compuerta del fondo', destino: 'r_17c_compuerta' },
+      ],
+      reglas: { bateria_agotada: { si: 'bateria <= 0', destino: 'r_19_frio' } },
+    },
+
+    r_17a_apagar: {
+      ruta: 'replicante',
+      texto:
+        'El interruptor está bajo una pestaña de plástico que hay que romper con la uña. El pitido para. El frío también. Cuentas los segundos con la caja contra el pecho mientras las botas de arriba se mueven hacia el otro extremo, y no vuelves a encenderla hasta que no oyes nada, y para entonces el gel ha perdido el color pálido y tiene un tono que no te gusta.',
+      opciones: [{ texto: 'Seguir hacia la compuerta', destino: 'r_17c_compuerta' }],
+    },
+
+    r_17b_esconderse: {
+      ruta: 'replicante',
+      texto:
+        'El hueco entre dos conductos tiene el ancho justo de alguien que ha dejado de importarle lo que es cómodo. Las unidades pasan a metro y medio. Uno de ellos se para exactamente donde estás y se queda ahí treinta segundos, los treinta más largos de la noche, hasta que la caja pita y él mira hacia el otro lado, porque el aparato le dice que el objetivo está dos niveles más abajo.',
+      opciones: [{ texto: 'Salir hacia la compuerta', destino: 'r_17c_compuerta' }],
+    },
+
+    r_17c_compuerta: {
+      ruta: 'replicante',
+      titulo: 'La compuerta',
+      texto: 'Metal ciego, sin manilla por dentro, con un lector de código al otro lado. No es una puerta que se abra desde aquí.',
+      ramas: [
+        {
+          condicion: 'confianza >= 2',
+          texto:
+            'Y se abre. Chirrido, golpe de aire frío, luz gris. Al otro lado, de espaldas, hay un hombre con una gabardina mojada que no se gira ni cuando pasas por su lado. Tiene la mano todavía en el teclado. Tarda en soltarla, como si le costara asumir que su número se ha quedado ahí grabado.',
+          efectos: { confianza: 1 },
+        },
+        {
+          condicion: 'confianza < 2',
+          texto:
+            'Y no se abre. La golpeas dos veces con la palma abierta, sin fuerza, más por decirte que lo has intentado. Al final das media vuelta y subes por donde no debes, a la vista de todos, porque ya no queda otra.',
+          efectos: { bateria: -60 },
+        },
+      ],
+      opciones: [{ texto: 'Salir a la ciudad alta', destino: 'r_14_cruce' }],
     },
 
     r_14_cruce: {
@@ -348,8 +509,8 @@ export const storyData: StoryData = {
       texto:
         'El arma sale sola, como veintidós años de costumbre. Y la cosa no se mueve. No suplica, no corre: sujeta la caja como quien sujeta a alguien. Tú has disparado antes a alguien que no debías. Eso también pesa como veintidós años.',
       opciones: [
-        { texto: 'Bajar el arma', efectos: { confianza: 1 }, destino: 'm_05_parte' },
-        { texto: 'Ordenarle que suelte la caja', destino: 'm_05_parte' },
+        { texto: 'Bajar el arma', efectos: { confianza: 1 }, destino: 'm_03b_bar' },
+        { texto: 'Ordenarle que suelte la caja', destino: 'm_03b_bar' },
       ],
     },
 
@@ -358,8 +519,8 @@ export const storyData: StoryData = {
       texto:
         'Le preguntas qué lleva ahí. Te contesta que algo que van a quemar esta mañana. No es la respuesta que esperabas y no encaja en ningún formulario que tú sepas rellenar.',
       opciones: [
-        { texto: 'Dejarle marchar y seguirle de lejos', destino: 'm_05_parte' },
-        { texto: 'Detenerle', efectos: { confianza: -1 }, destino: 'm_05_parte' },
+        { texto: 'Dejarle marchar y seguirle de lejos', destino: 'm_03b_bar' },
+        { texto: 'Detenerle', efectos: { confianza: -1 }, destino: 'm_03b_bar' },
       ],
     },
 
@@ -367,7 +528,26 @@ export const storyData: StoryData = {
       ruta: 'mora',
       texto:
         'Te das la vuelta. Das seis pasos. En el séptimo te paras, porque sabes perfectamente que mañana alguien te preguntará dónde estabas a esta hora y tú tendrás que decidir qué contestar.',
-      opciones: [{ texto: 'Seguir adelante igualmente', destino: 'm_05_parte' }],
+      opciones: [{ texto: 'Seguir adelante igualmente', destino: 'm_03b_bar' }],
+    },
+
+    m_03b_bar: {
+      ruta: 'mora',
+      hora: '05:20',
+      titulo: 'El Cristal',
+      texto:
+        'De vuelta al coche pasas por delante del Cristal, que a esta hora no abre para nadie salvo para los que salen de turno. Llevas cuatro meses y medio sin entrar. Los has contado, que es la manera fina de decir que no llevas cuatro meses y medio sin pensar en entrar.',
+      opciones: [
+        { texto: 'Pasar de largo', efectos: { confianza: 1 }, destino: 'm_05_parte' },
+        { texto: 'Una sola, de pie, en la barra', efectos: { sobrio: false }, destino: 'm_03c_recuerdo' },
+      ],
+    },
+
+    m_03c_recuerdo: {
+      ruta: 'mora',
+      texto:
+        'El camarero te la pone sin preguntar y ese es el problema de los sitios donde te conocen. A la mitad del vaso te vuelve lo de siempre: un portal, una linterna, una figura que se movió cuando no debía. Aquello lo cerró el departamento en catorce días y desde entonces hay un expediente con tu número que nadie ha vuelto a abrir. Te lo taparon. Eso es lo que peor llevas: que te lo taparon y que lo aceptaste.',
+      opciones: [{ texto: 'Volver al coche', destino: 'm_05_parte' }],
     },
 
     m_05_parte: {
@@ -375,8 +555,47 @@ export const storyData: StoryData = {
       tipo: 'decision_clave',
       texto: 'La radio del coche espera. Un parte de incidencia son cuarenta segundos. No darlo son cuarenta segundos que mañana no podrás justificar.',
       opciones: [
-        { texto: 'Declarar el encuentro', efectos: { mora_declaro: true }, destino: 'm_06_refuerzo' },
-        { texto: 'Callártelo e ir solo', efectos: { mora_declaro: false }, destino: 'm_hub' },
+        { texto: 'Declarar el encuentro', efectos: { mora_declaro: true }, destino: 'm_05b_comisaria' },
+        { texto: 'Callártelo', efectos: { mora_declaro: false }, destino: 'm_05b_comisaria' },
+      ],
+    },
+
+    m_05b_comisaria: {
+      ruta: 'mora',
+      hora: '05:40',
+      titulo: 'Comisaría',
+      texto:
+        'Subes a devolver las llaves del coche y el caso ya no es tuyo. Solaris ha pedido el expediente a las cinco y cuarto y alguien de arriba se lo ha dado sin preguntar para qué. En el pasillo te cruzas con Sanabria, de tu misma promoción, que ahora tiene despacho con ventana. Te pone la mano en el hombro, que es lo que hace la gente antes de decirte algo desagradable, y te dice en voz baja que te apartes, que este marrón no es de los tuyos.',
+      opciones: [
+        { texto: 'Preguntarle quién firmó la cesión', efectos: { mora_sospecha: 1 }, destino: 'm_05c_sanabria' },
+        { texto: 'Darle las gracias y callarte', destino: 'm_05d_salida' },
+      ],
+    },
+
+    m_05c_sanabria: {
+      ruta: 'mora',
+      texto:
+        'Sanabria mira el pasillo antes de contestar, y eso ya es una respuesta. Dice que la cesión venía firmada de fábrica, sin nombre, con un sello de convenio. Y añade algo que no te esperabas: que no es la primera vez este año.',
+      efectos: { mora_sabe_precedente: true },
+      opciones: [{ texto: 'Salir de allí', destino: 'm_05d_salida' }],
+    },
+
+    m_05d_salida: {
+      ruta: 'mora',
+      texto: 'Bajas al aparcamiento con las llaves todavía en la mano. No has devuelto el coche. Nadie te lo va a reclamar hasta las nueve.',
+      tipo: 'bifurcacion_automatica',
+      nota: 'Sin opciones: el motor resuelve por ramas y salta al destino de la rama que cumpla.',
+      ramas: [
+        {
+          condicion: 'mora_declaro == true',
+          texto: 'La radio te avisa: tienes equipo de apoyo asignado en doce minutos.',
+          destino: 'm_06_refuerzo',
+        },
+        {
+          condicion: 'mora_declaro == false',
+          texto: 'Nadie sabe dónde estás y así vas a seguir un rato.',
+          destino: 'm_hub',
+        },
       ],
     },
 
@@ -395,7 +614,7 @@ export const storyData: StoryData = {
       tipo: 'hub',
       texto:
         'Tres sitios donde un replicante con una caja que necesita frío podría parar. Llegas a todos con horas de retraso: esta noche vas siempre por detrás de alguien que ya ha pasado por aquí.',
-      reglas: { max_visitas: 2, destino_salida: 'm_10_eida' },
+      reglas: { max_visitas: 2, destino_salida: 'm_11b_azotea' },
       opciones: [
         { texto: 'El mercado del puerto', destino: 'm_07_mercado', visitable_una_vez: true },
         { texto: 'La clínica del subsuelo', destino: 'm_08_clinica', visitable_una_vez: true },
@@ -406,7 +625,8 @@ export const storyData: StoryData = {
     m_07_mercado: {
       ruta: 'mora',
       texto:
-        'En el mercado todo el mundo ha visto algo y nadie lo ha visto gratis. Encuentras al que cobró por dar el aviso: un tipo con delantal que te enseña el número que le pagaron y que no sabe qué había en la caja. Le pagaron por la caja, no por lo de dentro. Eso te da que pensar más de lo que te gustaría.',
+        'En el mercado todo el mundo ha visto algo y nadie lo ha visto gratis. Encuentras al que cobró por dar el aviso: un tipo con delantal que te enseña el número que le pagaron y que no sabe qué había en la caja. Le pagaron por la caja, no por lo de dentro. Eso te da que pensar más de lo que te gustaría. Lo que sí sabe es cómo la buscan: la caja pita cada media hora, y ese pitido se oye desde tres calles.',
+      efectos: { sabe_rastreo_caja: true },
       opciones: [{ texto: 'Seguir', destino: 'm_hub' }],
     },
 
@@ -436,6 +656,119 @@ export const storyData: StoryData = {
       opciones: [{ texto: 'Subir', destino: 'm_hub' }],
     },
 
+    m_11b_azotea: {
+      ruta: 'mora',
+      hora: '06:50',
+      titulo: 'Sobre el mercado',
+      texto:
+        'Le ves cruzar el tejado de lonas del mercado con la caja por delante, saltando de estructura en estructura sobre doscientos puestos. Detrás van dos unidades de Solaris que se mueven mejor que tú y mucho mejor que él. Hay un salto de metro y medio entre la última lona y la pasarela de mantenimiento.',
+      opciones: [
+        { texto: 'Saltar detrás de ellos', condicion: 'sobrio == true', destino: 'm_11c_salto_bien' },
+        { texto: 'Saltar detrás de ellos', condicion: 'sobrio == false', destino: 'm_11d_salto_mal' },
+        { texto: 'Rodear por dentro del mercado y perder tres minutos', efectos: { mora_sospecha: 1 }, destino: 'm_12_puente' },
+      ],
+    },
+
+    m_11c_salto_bien: {
+      ruta: 'mora',
+      texto:
+        'Caes mal, con la rodilla, y te levantas peor, pero te levantas. Desde ahí ves lo que no habrías visto desde la calle: las dos unidades no van detrás de él. Van por delante, cerrándole la única salida que tiene. Alguien les ha dicho por dónde va a pasar antes de que pase.',
+      efectos: { mora_sabe_precedente: true, confianza: 1 },
+      opciones: [{ texto: 'Bajar a la pasarela', destino: 'm_12_puente' }],
+    },
+
+    m_11d_salto_mal: {
+      ruta: 'mora',
+      texto:
+        'Metro y medio no es nada. Lo has saltado mil veces. Lo que pasa es que esta vez el pie sale una décima tarde, y una décima es exactamente la diferencia entre una rodilla rota y doscientos puestos de mercado vistos desde arriba mientras caes.',
+      resolucion: 'final:f_muerte_mora',
+    },
+
+    m_12_puente: {
+      ruta: 'mora',
+      hora: '07:10',
+      titulo: 'La pasarela',
+      texto:
+        'El control de Solaris está montado en la pasarela que une el puerto con la ciudad alta: dos vehículos, una mesa plegable y un escáner que barre el pasillo de servicio de abajo. En la pantalla hay un punto que pita cada treinta segundos, y ese punto es una caja térmica. Dos unidades ya han bajado a por él. No corren. Nadie corre cuando va a recoger un paquete.\n\nDesde donde estás, por la escalera de servicio, llegas antes que ellos. Doce, quince segundos antes. Y llevas toda la noche diciéndote que solo estabas haciendo tu trabajo.',
+      opciones: [
+        {
+          texto: 'Falsear la lectura del escáner y mandarlos al nivel equivocado',
+          condicion: 'sabe_rastreo_caja == true',
+          efectos: { ayudo_escape: true, confianza: 3 },
+          destino: 'm_12a_escaner',
+        },
+        {
+          texto: 'Abrir la compuerta de servicio con tu código de agente',
+          efectos: { ayudo_escape: true, rastro: true, confianza: 3 },
+          destino: 'm_12b_compuerta',
+        },
+        {
+          texto: 'Plantarte delante y decirles que la detención es competencia policial',
+          efectos: { ayudo_escape: true, confianza: 2 },
+          destino: 'm_12c_plantarse',
+        },
+        { texto: 'Quedarte donde estás y dejar que hagan su trabajo', efectos: { confianza: -2 }, destino: 'm_13_factura' },
+      ],
+    },
+
+    m_12a_escaner: {
+      ruta: 'mora',
+      texto:
+        'El técnico del control tiene veintitrés años y una placa de prácticas. Le pides el terminal con la voz de quien lleva veintidós años pidiendo cosas y te lo da. Mueves el punto dos niveles hacia abajo, hacia el aparcamiento inundado, y le devuelves el aparato. Las dos unidades cambian de rumbo sin preguntar. Nadie va a revisar ese registro hasta dentro de una semana, y para entonces esto habrá acabado de una manera o de otra.',
+      opciones: [{ texto: 'Bajar al pasillo de servicio', destino: 'm_13_factura' }],
+    },
+
+    m_12b_compuerta: {
+      ruta: 'mora',
+      texto:
+        'La compuerta de servicio se abre con código de agente y el código de agente lleva tu número. Lo tecleas igual. Hay un chirrido, un golpe de aire frío, y una figura empapada con una caja que sale por ahí y desaparece pasarela abajo sin mirarte. Tardas tres segundos en darte cuenta de que acabas de firmar lo que has hecho.',
+      opciones: [{ texto: 'Cerrar y volver arriba', destino: 'm_13_factura' }],
+    },
+
+    m_12c_plantarse: {
+      ruta: 'mora',
+      texto:
+        'Te pones en mitad del pasillo con la placa en alto y les recitas el artículo. Las dos unidades se paran. No discuten: consultan. Uno de ellos habla por el pinganillo mirándote a la cara todo el rato, y eso es peor que si te apuntara. Ganas cuatro minutos y los ganas con tu nombre por delante, delante de testigos y de cámaras.',
+      ramas: [
+        {
+          condicion: 'mora_declaro == true',
+          texto: 'Tu propio equipo de apoyo está a diez metros, oyéndolo todo. Mañana habrá tres versiones de esto y ninguna será la tuya.',
+        },
+      ],
+      opciones: [{ texto: 'Dejarles pasar cuando ya no sirva de nada', destino: 'm_13_factura' }],
+    },
+
+    m_13_factura: {
+      ruta: 'mora',
+      hora: '07:30',
+      titulo: 'La factura',
+      texto:
+        'Treinta y cinco minutos después, tu terminal deja de abrir expedientes. No es un error: es una pantalla azul muy educada que te agradece tus años de servicio y te invita a contactar con administración en horario de oficina.\n\nEl teléfono suena casi a la vez. Es Eida Lunaris y quiere saber si te encuentras bien.',
+      opciones: [
+        { texto: 'Cogerlo', destino: 'm_10_eida' },
+        { texto: 'Dejarlo sonar', efectos: { confianza: 1 }, destino: 'm_13b_sanabria' },
+      ],
+    },
+
+    m_13b_sanabria: {
+      ruta: 'mora',
+      hora: '07:35',
+      titulo: 'La salida limpia',
+      texto:
+        'El que llama después no es Solaris: es Sanabria, y habla como alguien a quien le han pedido que llame. Te ofrece la salida limpia. Vete a casa ahora, duerme, preséntate el lunes y esto no ha pasado. Hasta te lo dice con cariño, que es lo que más rabia da, porque sabes que él se lo cree.',
+      opciones: [
+        { texto: 'Irte a casa', efectos: { confianza: -3 }, destino: 'm_11_cruce' },
+        { texto: 'Colgar y seguir', efectos: { confianza: 1 }, destino: 'm_11_cruce' },
+      ],
+    },
+
+    m_11e_disparo: {
+      ruta: 'mora',
+      texto:
+        'No hay aviso. Tampoco hay maldad: hay un procedimiento, y en el procedimiento tú ya no eres un agente sino un obstáculo no identificado en una zona bajo control corporativo. Lo último que piensas, tirado en el bordillo con la lluvia entrándote en un ojo, es que al menos esta vez el que se ha equivocado has sido tú.',
+      resolucion: 'final:f_muerte_mora',
+    },
+
     m_10_eida: {
       ruta: 'mora',
       texto:
@@ -453,6 +786,14 @@ export const storyData: StoryData = {
       hora: '07:40',
       texto: 'Amanece gris. Los encuentras a la vez: al replicante contra una persiana bajada, con la caja pitando, y al coche de Solaris entrando por el fondo de la calle sin ninguna prisa.',
       resolucion: 'evaluar_finales',
+      ramas: [
+        {
+          condicion: 'sobrio == false && ayudo_escape == true',
+          texto:
+            'Y te plantas otra vez en medio, como en la pasarela, solo que ahora llevas doce horas de pie y media copa de hace dos horas y el brazo no te sube igual de rápido que a ellos.',
+          destino: 'm_11e_disparo',
+        },
+      ],
     },
   },
 
@@ -461,7 +802,7 @@ export const storyData: StoryData = {
 
     f_siembra: {
       titulo: 'Fuera de la ciudad',
-      condicion: "confianza >= 4 && sabe_verdad == true && (bateria > 40 || ruta == 'mora')",
+      condicion: 'sabe_verdad == true && (confianza >= 4 || ayudo_escape == true)',
       texto_mora:
         'Subes al replicante al coche y conduces hacia el norte hasta que la lluvia se acaba, que es más lejos de lo que creías. Nunca has visto tierra que no fuera de nadie. La semilla entra en ella sin ceremonia, en un minuto y medio. Vuelves solo. En el informe escribes que le perdiste el rastro en el puerto, y por primera vez en muchos años mientes sin que te pese.',
       texto_replicante:
@@ -470,9 +811,9 @@ export const storyData: StoryData = {
 
     f_culpa: {
       titulo: 'El que carga con ello',
-      condicion: 'confianza >= 2',
+      condicion: 'confianza >= 2 || ayudo_escape == true',
       texto_mora:
-        'Le dices que corra y que no mire atrás. Luego te quedas ahí, en mitad de la calle, esperando al coche. A Eida le cuentas que la caja se perdió por tu culpa, que la tuviste delante y la dejaste ir. Te lo cree, porque es exactamente lo que esperaba de ti. Te quitan la placa esa misma semana. Duermes mejor que en años.',
+        'Le dices que corra y que no mire atrás. Luego te quedas ahí, en mitad de la calle, esperando al coche. A Eida le cuentas que la caja se perdió por tu culpa, que la tuviste delante y la dejaste ir. Te lo cree, porque es exactamente lo que esperaba de ti. Te quitan la placa esa misma semana, y si dejaste tu código en una compuerta te la quitan con expediente. Duermes mejor que en años.',
       texto_replicante:
         'El hombre de la gabardina te dice que corras. No te explica por qué y tú no tienes tiempo de preguntárselo. Meses después, muy lejos, lees que a un agente le abrieron expediente por dejar escapar material de Solaris. No sale su nombre en la noticia. Nunca llegaste a sabérselo.',
     },
@@ -493,6 +834,22 @@ export const storyData: StoryData = {
         'Todo pasa en cuatro segundos y ninguno de los cuatro es culpa de nadie en concreto. La caja acaba en el suelo, abierta, bajo la lluvia. Eida ni siquiera se agacha a mirarla: da media vuelta y firma algo en una tablet mientras vuelve al coche. A eso se le llama resolver un incidente.',
       texto_replicante:
         'La caja se te va de las manos en el forcejeo. Ves el gel pálido mezclarse con el agua del bordillo y bajar hacia la alcantarilla, y lo ves durante mucho más tiempo del que tarda en desaparecer. Solaris no tendrá que quemar nada. Salió gratis.',
+    },
+
+    // Finales directos: no entran en orden_evaluacion, se alcanzan desde el
+    // nodo que los nombra con "final:<id>".
+    f_muerte_mora: {
+      titulo: 'Incidente resuelto',
+      condicion: 'directo',
+      texto_mora:
+        'En el parte de Solaris figuras como agente fuera de servicio en zona restringida. Tres líneas. Sanabria va al entierro y dice unas palabras sobre tus veintidós años. La caja térmica llegó a la planta a las nueve y diez y la orden se ejecutó a la hora prevista, porque ese es el tipo de cosa que no depende de nadie en concreto.',
+    },
+
+    f_semilla_fria: {
+      titulo: 'Seis horas',
+      condicion: 'directo',
+      texto_replicante:
+        'Solaris no tuvo que quemar nada: el frío se acabó solo y la ciudad hizo el resto. A ti te devuelven a la planta, al turno de noche y al pasillo B, con un correctivo en el expediente por abandono del puesto. Nadie menciona la caja. Y lo que peor llevas no es haber fallado, es saber que lo tuviste seis horas en las manos y que las seis horas eran todo lo que había.',
     },
   },
 };
