@@ -61,7 +61,8 @@ function tokenize(expr: string): Token[] {
     }
     if (/[A-Za-z_]/.test(ch)) {
       let j = i;
-      while (j < expr.length && /[A-Za-z0-9_]/.test(expr[j])) j++;
+      // El punto forma parte del nombre: "persistente.mora_cayo".
+      while (j < expr.length && /[A-Za-z0-9_.]/.test(expr[j])) j++;
       tokens.push({ type: 'ident', value: expr.slice(i, j) });
       i = j;
       continue;

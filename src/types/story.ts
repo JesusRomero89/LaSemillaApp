@@ -35,11 +35,17 @@ export interface ReglaBateriaAgotada {
   destino: string;
 }
 
+export interface ReglaTrasPrimeraVisita {
+  destino: string;
+  una_vez?: boolean;
+}
+
 export interface ReglasNodo {
   max_visitas?: number;
   salida_forzada_si?: string;
   destino_salida?: string;
   bateria_agotada?: ReglaBateriaAgotada;
+  tras_primera_visita?: ReglaTrasPrimeraVisita;
 }
 
 export interface Nodo {
@@ -56,6 +62,10 @@ export interface Nodo {
   // a ese final (muertes y cortes secos).
   resolucion?: string;
   nota?: string;
+  // Reloj: al entrar se descuentan los minutos del trayecto y, si el nodo
+  // es una parada con corriente, se suma su recarga.
+  minutos?: number;
+  recarga?: number;
 }
 
 export interface Final {
@@ -64,6 +74,13 @@ export interface Final {
   // Los finales directos solo traen el texto de la ruta en la que ocurren.
   texto_mora?: string;
   texto_replicante?: string;
+  efectos?: EfectosNodo;
+}
+
+export interface PersistenteDef {
+  tipo: 'bool';
+  inicial: boolean;
+  se_activa_en?: string;
 }
 
 export interface Personaje {
@@ -85,6 +102,9 @@ export interface StoryData {
     idioma: string;
     ambientacion: string;
     notas?: string;
+    reloj?: Record<string, string>;
+    tokens?: Record<string, string>;
+    persistencia?: Record<string, string>;
   };
   mundo: Record<string, unknown>;
   personajes: Record<string, Personaje>;
@@ -95,4 +115,7 @@ export interface StoryData {
     orden_evaluacion: string[];
     [key: string]: Final | string[];
   };
+  // Marcas que sobreviven a la partida y se leen en la siguiente. Se
+  // escriben con efectos del tipo "persistente.<nombre>".
+  persistentes: Record<string, PersistenteDef>;
 }
